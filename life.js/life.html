@@ -1,0 +1,240 @@
+<head>
+
+
+<script>
+/* Simple JavaScript Inheritance
+ * By John Resig http://ejohn.org/
+ * MIT Licensed.
+ */
+// Inspired by base2 and Prototype
+(function(){
+  var initializing = false, fnTest = /xyz/.test(function(){xyz;}) ? /\b_super\b/ : /.*/;
+ 
+  // The base Class implementation (does nothing)
+  this.Class = function(){};
+ 
+  // Create a new Class that inherits from this class
+  Class.extend = function(prop) {
+    var _super = this.prototype;
+   
+    // Instantiate a base class (but only create the instance,
+    // don't run the init constructor)
+    initializing = true;
+    var prototype = new this();
+    initializing = false;
+   
+    // Copy the properties over onto the new prototype
+    for (var name in prop) {
+      // Check if we're overwriting an existing function
+      prototype[name] = typeof prop[name] == "function" &&
+        typeof _super[name] == "function" && fnTest.test(prop[name]) ?
+        (function(name, fn){
+          return function() {
+            var tmp = this._super;
+           
+            // Add a new ._super() method that is the same method
+            // but on the super-class
+            this._super = _super[name];
+           
+            // The method only need to be bound temporarily, so we
+            // remove it when we're done executing
+            var ret = fn.apply(this, arguments);        
+            this._super = tmp;
+           
+            return ret;
+          };
+        })(name, prop[name]) :
+        prop[name];
+    }
+   
+    // The dummy class constructor
+    function Class() {
+      // All construction is actually done in the init method
+      if ( !initializing && this.init )
+        this.init.apply(this, arguments);
+    }
+   
+    // Populate our constructed prototype object
+    Class.prototype = prototype;
+   
+    // Enforce the constructor to be what we expect
+    Class.prototype.constructor = Class;
+ 
+    // And make this class extendable
+    Class.extend = arguments.callee;
+   
+    return Class;
+  };
+})();
+</script>
+</head>
+<body>
+	<canvas id="canvas" width="600px" height="600px"></canvas>
+	<script>
+		
+		function rngNorm (range, seed) {
+			if ( typeof seed === 'undefined' )
+				seed = Math.random();
+
+			if ( range._ ) {
+				var value = range._;
+				return value[Math.floor(seed * value.length)];
+			}
+			if ( range.type == 'range' ) {
+				var step = 1;
+				var min = range.min;
+				var max = range.max;
+				return Math.floor( (min + (seed * (max - min)))/step)*step;
+			}
+			if ( range.type == 'color' ) {
+				var r,g,b;
+				r = Math.floor((Math.random()) * 256).toString(16);
+				g = Math.floor((Math.random()) * 256).toString(16);
+				b = Math.floor((Math.random()) * 256).toString(16);
+				return '#' + r + g + b;
+				
+			}
+		}
+
+		var canvas = document.getElementById('canvas');
+		var ctx = canvas.getContext('2d');
+
+		
+		var Atom = Class.extend({
+			init: function(input, out) {
+				this.dna = [];
+				this.cna = [];
+				for ( var n in input ) {
+					var value = rngNorm(input[n]);
+					this.cna.push(
+						{'cmd': 'set',
+						 'key': n,
+						 'value': value});
+					this._set(n, value);
+				}
+				this.dna.push({'cmd': 'if',
+						'op': 'fat',
+						'>': 10,
+						'set_key': 'move',
+						'set_value': true });
+				this.dna.push({'cmd': 'if',
+						'op': 'fat',
+						'<': 80,
+						'set_key': 'hunt',
+						'set_value': true })
+
+			},
+			
+			_set : function(key, value) {
+				if ( typeof this[key] === 'function' ) {
+					this[key](value);
+				}
+				else { 
+					this[key] = value;
+				}				
+			},
+			
+			move: function() {
+				var m = this.speed / Math.sqrt(this.fat);
+				this.y += Math.sin(this.orient) * m;
+				this.x += Math.cos(this.orient) * m;
+				this.fat -= Math.sqrt(m)/2;
+			},
+
+			follow: function ( atom ) {
+				this.orient = Math.atan2(atom.y - this.y, atom.x - this.x);
+			},
+
+			hunt: function ( enable ) {
+				if ( this.__huntstate != enable && this.near && this.near.length > 0) {
+					this.__huntstate = enable;
+					this.__victim = this.near[Math.floor(Math.random()*this.near.length)];
+					this.follow(this.__victim);
+				}
+				if ( this.__huntstate && near(this, this.__victim, 2) ) {
+					this._eat(this.__victim);
+					this.__huntstate = false;
+				}
+
+			},
+
+			_eat: function (atom) {
+				this.fat += (atom.fat * 0.8);
+				atom.fat = 0;
+			},
+
+			_update: function ( ) {
+				var dna = this.dna;
+				for ( var d in dna ) {
+					var c = dna[d];
+					if ( c.cmd == 'if' && this[c.op] > c['>'] ) {
+						this._set(c.set_key, c.set_value);
+					}
+					else if ( c.cmd == 'if' && this[c.op] == c['='] ) {
+						this._set(c.set_key, c.set_value);
+					}
+					else if ( c.cmd == 'if' && this[c.op] < c['<'] ) {
+						this._set(c.set_key, c.set_value);
+					}
+				}
+			},
+			_draw: function (ctx) {
+				if ( ! this.size ) {
+					this.size = 5
+				}
+				ctx.beginPath();
+				ctx.lineWidth = '1';
+				ctx.strokeStyle = this.color;
+				ctx.fillStyle = this.color;
+				ctx.fillRect( this.x, this.y, this.size, this.size);		
+			}
+		});
+		population = [];
+
+		for ( var i=0; i < 1000; i ++ ) {
+			population.push( 
+				new Atom({ 	x: { type: 'range', min: 0, max: 500}, 
+						y: { type: 'range', min: 0, max: 500},
+						speed: { type: 'range', min: 1, max: 15},
+						orient: { type: 'range', min: 0, max: 2*Math.PI},
+						color: { type: 'color' },
+						size: { type: 'range', min: 1, max: 8},
+						fat: { type: 'range', min: 10, max: 2000}
+					}));
+		}
+						
+		function near(a, b, d) {
+			if ( Math.abs( a.x - b.x ) < d ||
+			     Math.abs( a.y - b.y ) < d ) 
+				return true;
+		}
+
+		window.setInterval(function () {
+			ctx.fillStyle = 'white';
+			ctx.fillRect(0, 0, 2000, 2000);
+			
+			for ( var p in population ) {
+				var atom = population[p];
+				if ( atom.fat <= 0 ) {
+					delete population[p];
+				}
+				atom._update(400);
+				atom._draw(ctx);
+				
+				for ( var n in population ) {
+					
+					if ( near(atom, population[n], 20) ) {
+						if ( ! atom.near ) {
+							atom.near = [];
+						}
+						atom.near.push(population[n]);
+					}
+				}
+			}
+
+		}, 400)
+		
+		
+	
+	</script>
+</body>
