@@ -1,0 +1,48 @@
+//simple brainfuck compiler/translator
+// p --> pointer
+// m --> memory
+// l --> putchar
+// g --> getchar
+var tokens = {
+	']': '}',
+	'[': 'while(m[p]){',
+	'>': 'p++;',
+	'<': 'p--;',
+	'+': 'm[p]++;',
+	'-': 'm[p]--;',
+	'.': 'l(m[p]);'
+};
+
+function parse (input) {
+	var output='', token;
+	for (var i=0; i < input.length; i++) {
+		token = input.charAt(i);
+		if ( token in tokens ) {
+			output += tokens[token];
+		}
+	}
+	return output;	
+}
+function compile(input) {
+	return new Function('p', 'm', 'l', 'g', input);
+}
+function brainLuck(code, input){
+  var jslang = compile(parse(code));
+  
+  var output = '';
+  var input = input.split('');
+  
+  var mem = new Array(1000);
+	for (var i=0; i < mem.length; i++) {
+	  mem[i] = 0;
+	}
+  jslang(500, mem, 
+    function (char) {
+        output += String.fromCharCode(char);
+    },
+    function () {
+        return input.unshift();
+    }
+  );
+  return output;
+}
